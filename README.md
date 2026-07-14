@@ -1,25 +1,23 @@
 # npmap
 
-CLI to detect which npm libraries a website uses. Give it a URL (or a list) and the **signature** of a library, and npmap temporarily downloads the HTML, bundles and JS chunks, searches for the signature, and tells you which sites ship it.
-
-> Authorized use only (tech inventory / defensive recon).
+CLI to detect which npm libraries a website uses. Give it a URL (or a list) and the **signature** of a library, and npmap temporarily downloads the HTML, bundles and JS chunks, searches for the signature, and tells you which sites ship it (see it as grep for the web).
 
 ## Requirements
 
 - Node.js >= 20
-- No runtime dependencies
 
 ## Install
 
 ```bash
 pnpm install
 pnpm build
+pnpm link --global
 ```
 
 ## Usage
 
 ```bash
-node dist/cli.js <targets...> [options]
+npmap <targets...> [options]
 ```
 
 Targets can be positional URLs/hosts, a file (`-f targets.txt`), or stdin.
@@ -44,16 +42,16 @@ Targets can be positional URLs/hosts, a file (`-f targets.txt`), or stdin.
 
 Exit codes: `0` match found · `1` no match · `2` usage error.
 
-Full flag list: `node dist/cli.js --help`
+Full flag list: `npmap --help`
 
 ## Examples
 
 ```bash
 # Does it use React?
-node dist/cli.js https://example.com --signature "__REACT_DEVTOOLS_GLOBAL_HOOK__"
+npmap https://example.com --signature "__REACT_DEVTOOLS_GLOBAL_HOOK__"
 
 # Scan a list of subdomains and print only the ones using lodash
-cat subs.txt | node dist/cli.js --signatures signatures.example.json --lib lodash --follow-chunks --list
+cat subs.txt | npmap --signatures signatures.example.json --lib lodash --follow-chunks --list
 ```
 
 ## Development
