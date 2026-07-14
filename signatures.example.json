@@ -1,0 +1,26 @@
+{
+  "react": {
+    "description": "React runtime present on the page.",
+    "any": ["__REACT_DEVTOOLS_GLOBAL_HOOK__", "react.production.min", "re:__reactContainer\\$"]
+  },
+  "vue": {
+    "description": "Vue 2/3 runtime.",
+    "any": ["__VUE__", "re:Vue\\.version", "__vue_app__"]
+  },
+  "angular": {
+    "description": "Angular framework markers.",
+    "any": ["ng-version", "__ngContext__", "re:@angular/core"]
+  },
+  "jquery": {
+    "description": "jQuery library.",
+    "any": ["re:jQuery\\.fn\\.jquery", "re:jquery[.-]\\d+\\.\\d+"]
+  },
+  "lodash": {
+    "description": "Lodash utility library.",
+    "any": ["re:lodash\\.templateSources", "re:VERSION\\s*=\\s*['\"]4\\.\\d+\\.\\d+['\"]"]
+  },
+  "fakelib": {
+    "description": "Test fixture signature used by npmap's own tests.",
+    "all": ["__FAKELIB_SIGNATURE__", "re:FakeLib\\s+v\\d+"]
+  }
+}

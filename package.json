@@ -1,0 +1,39 @@
+{
+  "name": "npmap",
+  "version": "0.1.0",
+  "description": "CLI to fingerprint npm libraries on websites by scanning HTML, bundles and chunks for signatures.",
+  "type": "module",
+  "bin": {
+    "npmap": "dist/cli.js"
+  },
+  "main": "dist/scanner.js",
+  "files": [
+    "dist",
+    "signatures.example.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test \"dist-test/test/**/*.test.js\"",
+    "start": "node dist/cli.js"
+  },
+  "keywords": [
+    "npm",
+    "fingerprint",
+    "signature",
+    "recon",
+    "bundle",
+    "cli",
+    "security"
+  ],
+  "license": "MIT",
+  "packageManager": "pnpm@11.1.2",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.6.0"
+  }
+}
