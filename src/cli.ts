@@ -141,10 +141,10 @@ async function run(targetArgs: string[], opts: CliOptions): Promise<void> {
     process.stderr.write(`npmap: temp files kept under ${options.tmpDir ?? "OS temp dir"}\n`);
   }
 
-  // Set the exit code and let the event loop drain naturally. Avoid
-  // process.exit() here: with open (undici) sockets it races handle teardown
-  // and aborts with a libuv assertion on Windows.
-  process.exitCode = results.some((r) => r.matched) ? 0 : 1;
+  // A successful run always exits 0 (whether or not anything matched). The exit
+  // code is left at its default; we avoid process.exit() here because, with open
+  // (undici) sockets, it races handle teardown and aborts with a libuv
+  // assertion on Windows.
 }
 
 async function main(): Promise<void> {
@@ -184,18 +184,7 @@ async function main(): Promise<void> {
     .option("--no-color", "disable ANSI colors")
     .addHelpText(
       "after",
-      [
-        "",
-        "Exit codes:",
-        "  0  at least one target matched",
-        "  1  no target matched",
-        "  2  usage or input error",
-        "",
-        "Examples:",
-        '  npmap https://example.com -s "__REACT_DEVTOOLS_GLOBAL_HOOK__"',
-        "  cat subs.txt | npmap -S signatures.example.json -l lodash -c -L",
-        '  npmap https://example.com -r "jquery[.-]\\d+\\.\\d+" -i --json',
-      ].join("\n"),
+      ["", "Exit codes:", "  0  success", "  2  usage or input error"].join("\n"),
     )
     .action((targets: string[], opts: CliOptions) => run(targets, opts));
 

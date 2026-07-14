@@ -13,7 +13,7 @@ git clone https://github.com/kapeka0/npmap
 cd npmap
 pnpm install
 pnpm build
-pnpm link --global .
+pnpm link --global   # optional: exposes the `npmap` binary globally
 ```
 
 ## Usage
@@ -43,7 +43,7 @@ Targets can be positional URLs/hosts, a file (`-f, --file targets.txt`), or stdi
 - `-L, --list` / `-q, --quiet` — only matching hosts, one per line
 - `--json` / `--ndjson` — results as JSON
 
-Exit codes: `0` match found · `1` no match · `2` usage error.
+Exit codes: `0` success · `2` usage error.
 
 Full flag list: `npmap --help`
 
