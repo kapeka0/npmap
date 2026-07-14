@@ -40,7 +40,8 @@ Targets can be positional URLs/hosts, a file (`-f, --file targets.txt`), or stdi
 ### Output
 
 - default: readable report
-- `-L, --list` / `-q, --quiet` — only matching hosts, one per line
+- `-L, --list` — only matching hosts, one per line
+- `-q, --silent` — only matching hosts, nothing else (no notices)
 - `--json` / `--ndjson` — results as JSON
 
 Exit codes: `0` success · `2` usage error.

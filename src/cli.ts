@@ -69,7 +69,7 @@ interface CliOptions {
   json: boolean;
   ndjson: boolean;
   list: boolean;
-  quiet: boolean;
+  silent: boolean;
   color: boolean;
 }
 
@@ -131,13 +131,14 @@ async function run(targetArgs: string[], opts: CliOptions): Promise<void> {
   let format: OutputFormat = "human";
   if (opts.json) format = "json";
   else if (opts.ndjson) format = "ndjson";
-  else if (opts.list) format = "list";
+  else if (opts.list || opts.silent) format = "list";
 
   const color = opts.color && Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
-  const output = render(results, { format, color, quiet: opts.quiet });
+  const output = render(results, { format, color });
   if (output) process.stdout.write(`${output}\n`);
 
-  if (opts.keep) {
+  // In silent mode nothing but the matched hosts is written, so skip the notice.
+  if (opts.keep && !opts.silent) {
     process.stderr.write(`npmap: temp files kept under ${options.tmpDir ?? "OS temp dir"}\n`);
   }
 
@@ -180,7 +181,7 @@ async function main(): Promise<void> {
     .option("--json", "pretty JSON array of results", false)
     .option("--ndjson", "one JSON result per line", false)
     .option("-L, --list", "only matching hosts, one per line", false)
-    .option("-q, --quiet", "only matching hosts (suppress the report)", false)
+    .option("-q, --silent", "print only matching hosts, nothing else", false)
     .option("--no-color", "disable ANSI colors")
     .addHelpText(
       "after",
