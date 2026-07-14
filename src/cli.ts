@@ -1,63 +1,15 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
-import { parseArgs } from "node:util";
+import { Command, CommanderError, InvalidArgumentError } from "commander";
 import { buildSignatures } from "./signature.js";
 import { scanAll } from "./scanner.js";
 import { render, type OutputFormat } from "./output.js";
 import type { MatchMode, ScanOptions } from "./types.js";
 
-const DEFAULT_UA = "npmap/0.1 (+https://github.com/npmap)";
+const DEFAULT_UA = "npmap/0.1 (+https://github.com/kapeka0/npmap)";
 
-const HELP = `npmap — fingerprint npm libraries on websites by scanning HTML, bundles and chunks.
-
-USAGE
-  npmap [targets...] [options]
-  npmap -f targets.txt --signature "__REACT_DEVTOOLS_GLOBAL_HOOK__"
-  cat subs.txt | npmap --lib react --signatures signatures.json --list
-
-TARGETS
-  Positional URLs/hosts, a file via -f/--file (one per line, # comments ok),
-  or piped via stdin. Bare hosts get https:// prepended.
-
-SIGNATURES (at least one required)
-  --signature <str>     Literal string to search for (repeatable).
-  --regex <pattern>     Regular expression to search for (repeatable).
-  --signatures <file>   JSON file of named signatures (use with --lib).
-  --lib <name>          Select an entry from the --signatures file.
-  --ignore-case         Case-insensitive regex/file-regex matching.
-  --match-mode <mode>   "any" (default) or "all": require every signature.
-
-SCANNING
-  --follow-chunks       Recursively discover & scan chunks referenced in JS.
-  --depth <n>           Extra chunk-follow levels (default 2).
-  --concurrency <n>     Targets scanned in parallel (default 8).
-  --asset-concurrency <n>  Assets per target in parallel (default 6).
-  --timeout <ms>        Per-request timeout (default 15000).
-  --max-size <bytes>    Max bytes read per asset (default 5242880).
-  --retries <n>         Network retries per request (default 1).
-  --user-agent <str>    Override the User-Agent header.
-  --tmp-dir <dir>       Base dir for temp downloads (default OS temp).
-  --keep                Keep temp files and print their location.
-
-OUTPUT
-  --json                Pretty JSON array of results.
-  --ndjson              One JSON result per line.
-  --list                Only matching hosts, one per line (pipe-friendly).
-  --quiet               Alias for --list (suppresses the report).
-  --no-color            Disable ANSI colors.
-  -h, --help            Show this help.
-  --version             Show version.
-
-EXIT CODES
-  0  at least one target matched
-  1  no target matched
-  2  usage or input error
-`;
-
-function fail(message: string): never {
-  process.stderr.write(`npmap: ${message}\n`);
-  process.exit(2);
-}
+/** Thrown for usage/input problems; mapped to exit code 2. */
+class UsageError extends Error {}
 
 async function readStdin(): Promise<string> {
   const chunks: Buffer[] = [];
@@ -72,11 +24,18 @@ function parseLines(text: string): string[] {
     .filter((l) => l.length > 0 && !l.startsWith("#"));
 }
 
-function toInt(value: string | undefined, fallback: number, name: string): number {
-  if (value === undefined) return fallback;
+/** commander argument coercer: non-negative integer. */
+function intArg(value: string): number {
   const n = Number(value);
-  if (!Number.isFinite(n) || n < 0) fail(`invalid value for ${name}: ${value}`);
-  return Math.floor(n);
+  if (!Number.isInteger(n) || n < 0) {
+    throw new InvalidArgumentError("must be a non-negative integer.");
+  }
+  return n;
+}
+
+/** Collect repeatable option values into an array. */
+function collect(value: string, previous: string[]): string[] {
+  return previous.concat([value]);
 }
 
 async function readVersion(): Promise<string> {
@@ -89,57 +48,44 @@ async function readVersion(): Promise<string> {
   }
 }
 
-async function main(): Promise<void> {
-  const { values, positionals } = parseArgs({
-    allowPositionals: true,
-    options: {
-      file: { type: "string", short: "f" },
-      signature: { type: "string", multiple: true },
-      regex: { type: "string", multiple: true },
-      signatures: { type: "string" },
-      lib: { type: "string" },
-      "ignore-case": { type: "boolean", default: false },
-      "match-mode": { type: "string", default: "any" },
-      "follow-chunks": { type: "boolean", default: false },
-      depth: { type: "string" },
-      concurrency: { type: "string" },
-      "asset-concurrency": { type: "string" },
-      timeout: { type: "string" },
-      "max-size": { type: "string" },
-      retries: { type: "string" },
-      "user-agent": { type: "string" },
-      "tmp-dir": { type: "string" },
-      keep: { type: "boolean", default: false },
-      json: { type: "boolean", default: false },
-      ndjson: { type: "boolean", default: false },
-      list: { type: "boolean", default: false },
-      quiet: { type: "boolean", default: false },
-      "no-color": { type: "boolean", default: false },
-      help: { type: "boolean", short: "h", default: false },
-      version: { type: "boolean", default: false },
-    },
-  });
+interface CliOptions {
+  file?: string;
+  signature: string[];
+  regex: string[];
+  signatures?: string;
+  lib?: string;
+  ignoreCase: boolean;
+  matchMode: string;
+  followChunks: boolean;
+  depth: number;
+  concurrency: number;
+  assetConcurrency: number;
+  timeout: number;
+  maxSize: number;
+  retries: number;
+  userAgent?: string;
+  tmpDir?: string;
+  keep: boolean;
+  json: boolean;
+  ndjson: boolean;
+  list: boolean;
+  quiet: boolean;
+  color: boolean;
+}
 
-  if (values.help) {
-    process.stdout.write(HELP);
-    return;
-  }
-  if (values.version) {
-    process.stdout.write(`${await readVersion()}\n`);
-    return;
-  }
-
-  // Collect targets from positionals, file, and/or stdin.
-  const targets: string[] = [...positionals];
-  if (values.file) {
+/** Do the actual scan. Throws UsageError for input problems (exit 2). */
+async function run(targetArgs: string[], opts: CliOptions): Promise<void> {
+  // Collect targets from positionals, a file, and/or stdin.
+  const targets: string[] = [...targetArgs];
+  if (opts.file) {
     try {
-      targets.push(...parseLines(await readFile(values.file, "utf8")));
+      targets.push(...parseLines(await readFile(opts.file, "utf8")));
     } catch (err) {
-      fail(`cannot read targets file ${values.file}: ${(err as Error).message}`);
+      throw new UsageError(`cannot read targets file ${opts.file}: ${(err as Error).message}`);
     }
   }
-  const stdinRequested = positionals.includes("-");
-  const noExplicitTargets = targets.length === 0 && !values.file;
+  const stdinRequested = targets.includes("-");
+  const noExplicitTargets = targetArgs.length === 0 && !opts.file;
   if (stdinRequested || (noExplicitTargets && !process.stdin.isTTY)) {
     const idx = targets.indexOf("-");
     if (idx !== -1) targets.splice(idx, 1);
@@ -147,62 +93,126 @@ async function main(): Promise<void> {
   }
 
   const uniqueTargets = [...new Set(targets)];
-  if (uniqueTargets.length === 0) fail("no targets provided. See --help.");
+  if (uniqueTargets.length === 0) throw new UsageError("no targets provided. See --help.");
 
-  const matchMode = values["match-mode"] as string;
-  if (matchMode !== "any" && matchMode !== "all") fail(`--match-mode must be "any" or "all".`);
+  if (opts.matchMode !== "any" && opts.matchMode !== "all") {
+    throw new UsageError(`--match-mode must be "any" or "all".`);
+  }
 
   let built: Awaited<ReturnType<typeof buildSignatures>>;
   try {
     built = await buildSignatures({
-      literals: values.signature ?? [],
-      regexes: values.regex ?? [],
-      ignoreCase: Boolean(values["ignore-case"]),
-      signaturesFile: values.signatures,
-      lib: values.lib,
+      literals: opts.signature,
+      regexes: opts.regex,
+      ignoreCase: opts.ignoreCase,
+      signaturesFile: opts.signatures,
+      lib: opts.lib,
     });
   } catch (err) {
-    fail((err as Error).message);
+    throw new UsageError((err as Error).message);
   }
 
   const options: ScanOptions = {
     signatures: built.signatures,
-    matchMode: (built.forcedMode ?? matchMode) as MatchMode,
-    followChunks: Boolean(values["follow-chunks"]),
-    depth: toInt(values.depth, 2, "--depth"),
-    timeoutMs: toInt(values.timeout, 15000, "--timeout"),
-    maxBytes: toInt(values["max-size"], 5 * 1024 * 1024, "--max-size"),
-    retries: toInt(values.retries, 1, "--retries"),
-    userAgent: values["user-agent"] ?? DEFAULT_UA,
-    assetConcurrency: Math.max(1, toInt(values["asset-concurrency"], 6, "--asset-concurrency")),
-    tmpDir: values["tmp-dir"],
-    keepTemp: Boolean(values.keep),
+    matchMode: (built.forcedMode ?? opts.matchMode) as MatchMode,
+    followChunks: opts.followChunks,
+    depth: opts.depth,
+    timeoutMs: opts.timeout,
+    maxBytes: opts.maxSize,
+    retries: opts.retries,
+    userAgent: opts.userAgent ?? DEFAULT_UA,
+    assetConcurrency: Math.max(1, opts.assetConcurrency),
+    tmpDir: opts.tmpDir,
+    keepTemp: opts.keep,
   };
 
-  const targetConcurrency = Math.max(1, toInt(values.concurrency, 8, "--concurrency"));
-  const results = await scanAll(uniqueTargets, options, targetConcurrency);
+  const results = await scanAll(uniqueTargets, options, Math.max(1, opts.concurrency));
 
   let format: OutputFormat = "human";
-  if (values.json) format = "json";
-  else if (values.ndjson) format = "ndjson";
-  else if (values.list) format = "list";
+  if (opts.json) format = "json";
+  else if (opts.ndjson) format = "ndjson";
+  else if (opts.list) format = "list";
 
-  const color = !values["no-color"] && Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
-  const output = render(results, { format, color, quiet: Boolean(values.quiet) });
+  const color = opts.color && Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+  const output = render(results, { format, color, quiet: opts.quiet });
   if (output) process.stdout.write(`${output}\n`);
 
-  if (values.keep) {
+  if (opts.keep) {
     process.stderr.write(`npmap: temp files kept under ${options.tmpDir ?? "OS temp dir"}\n`);
   }
 
   // Set the exit code and let the event loop drain naturally. Avoid
   // process.exit() here: with open (undici) sockets it races handle teardown
   // and aborts with a libuv assertion on Windows.
-  const anyMatched = results.some((r) => r.matched);
-  process.exitCode = anyMatched ? 0 : 1;
+  process.exitCode = results.some((r) => r.matched) ? 0 : 1;
 }
 
-main().catch((err) => {
-  process.stderr.write(`npmap: ${err instanceof Error ? err.stack ?? err.message : String(err)}\n`);
-  process.exitCode = 2;
-});
+async function main(): Promise<void> {
+  const program = new Command();
+  const MAX = 5 * 1024 * 1024;
+
+  program
+    .name("npmap")
+    .description("Fingerprint npm libraries on websites by scanning HTML, bundles and chunks.")
+    .version(await readVersion(), "-V, --version", "output the version number")
+    .argument("[targets...]", "URLs/hosts to scan (also via -f/--file or stdin)")
+    // Signatures
+    .option("-s, --signature <str>", "literal signature to search for (repeatable)", collect, [])
+    .option("-r, --regex <pattern>", "regex signature to search for (repeatable)", collect, [])
+    .option("-S, --signatures <file>", "JSON file of named signatures (use with --lib)")
+    .option("-l, --lib <name>", "select an entry from the --signatures file")
+    .option("-i, --ignore-case", "case-insensitive matching", false)
+    .option("-m, --match-mode <mode>", 'combine signatures: "any" or "all"', "any")
+    // Targets
+    .option("-f, --file <path>", "read targets from a file (one per line, # comments ok)")
+    // Scanning
+    .option("-c, --follow-chunks", "recursively discover & scan JS chunks", false)
+    .option("-d, --depth <n>", "extra chunk-follow levels", intArg, 2)
+    .option("-j, --concurrency <n>", "targets scanned in parallel", intArg, 8)
+    .option("-a, --asset-concurrency <n>", "assets per target in parallel", intArg, 6)
+    .option("-t, --timeout <ms>", "per-request timeout in ms", intArg, 15000)
+    .option("-z, --max-size <bytes>", "max bytes read per asset", intArg, MAX)
+    .option("-R, --retries <n>", "network retries per request", intArg, 1)
+    .option("-A, --user-agent <str>", "override the User-Agent header")
+    .option("-k, --keep", "keep temp files and print their location", false)
+    .option("--tmp-dir <dir>", "base dir for temp downloads (default OS temp)")
+    // Output
+    .option("--json", "pretty JSON array of results", false)
+    .option("--ndjson", "one JSON result per line", false)
+    .option("-L, --list", "only matching hosts, one per line", false)
+    .option("-q, --quiet", "only matching hosts (suppress the report)", false)
+    .option("--no-color", "disable ANSI colors")
+    .addHelpText(
+      "after",
+      [
+        "",
+        "Exit codes:",
+        "  0  at least one target matched",
+        "  1  no target matched",
+        "  2  usage or input error",
+        "",
+        "Examples:",
+        '  npmap https://example.com -s "__REACT_DEVTOOLS_GLOBAL_HOOK__"',
+        "  cat subs.txt | npmap -S signatures.example.json -l lodash -c -L",
+        '  npmap https://example.com -r "jquery[.-]\\d+\\.\\d+" -i --json',
+      ].join("\n"),
+    )
+    .action((targets: string[], opts: CliOptions) => run(targets, opts));
+
+  program.exitOverride();
+  try {
+    await program.parseAsync(process.argv);
+  } catch (err) {
+    if (err instanceof CommanderError) {
+      // Help/version print their own output and carry exitCode 0; parse/usage
+      // errors carry a non-zero exitCode, which we normalize to 2.
+      process.exitCode = err.exitCode === 0 ? 0 : 2;
+      return;
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`npmap: ${message}\n`);
+    process.exitCode = 2;
+  }
+}
+
+void main();

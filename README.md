@@ -9,9 +9,11 @@ CLI to detect which npm libraries a website uses. Give it a URL (or a list) and 
 ## Install
 
 ```bash
+git clone https://github.com/kapeka0/npmap
+cd npmap
 pnpm install
 pnpm build
-pnpm link --global
+pnpm link --global .
 ```
 
 ## Usage
@@ -20,24 +22,25 @@ pnpm link --global
 npmap <targets...> [options]
 ```
 
-Targets can be positional URLs/hosts, a file (`-f targets.txt`), or stdin.
+Targets can be positional URLs/hosts, a file (`-f, --file targets.txt`), or stdin.
 
 ### Signatures (at least one)
 
-- `--signature "<text>"` — literal string (repeatable)
-- `--regex "<pattern>"` — regular expression (repeatable; `--ignore-case` for case-insensitive)
-- `--signatures libs.json --lib <name>` — named entry from a signatures file (see `signatures.example.json`)
+- `-s, --signature "<text>"` — literal string (repeatable)
+- `-r, --regex "<pattern>"` — regular expression (repeatable; `-i, --ignore-case` for case-insensitive)
+- `-S, --signatures libs.json -l, --lib <name>` — named entry from a signatures file (see `signatures.example.json`)
+- `-m, --match-mode any|all` — combine signatures (default `any`)
 
 ### Scanning
 
-- `--follow-chunks` — follow chunks referenced inside the JS (webpack/vite)
-- `--depth <n>` — chunk-follow levels (default 2)
-- `--keep` — keep the temporary files
+- `-c, --follow-chunks` — follow chunks referenced inside the JS (webpack/vite)
+- `-d, --depth <n>` — chunk-follow levels (default 2)
+- `-k, --keep` — keep the temporary files
 
 ### Output
 
 - default: readable report
-- `--list` / `--quiet` — only matching hosts, one per line
+- `-L, --list` / `-q, --quiet` — only matching hosts, one per line
 - `--json` / `--ndjson` — results as JSON
 
 Exit codes: `0` match found · `1` no match · `2` usage error.
