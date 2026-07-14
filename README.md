@@ -44,10 +44,6 @@ Targets can be positional URLs/hosts, a file (`-f, --file targets.txt`), or stdi
 - `-q, --silent` — only matching hosts, nothing else (no notices)
 - `--json` / `--ndjson` — results as JSON
 
-Exit codes: `0` success · `2` usage error.
-
-Full flag list: `npmap --help`
-
 ## Examples
 
 ```bash
